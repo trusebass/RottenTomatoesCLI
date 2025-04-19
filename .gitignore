@@ -1,0 +1,33 @@
+# Python virtual environment
+rtenv/
+venv/
+env/
+ENV/
+
+# Debug files
+debug_*.txt
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Go binary and test files
+rt-tui/rt-tui
+*.test
+*.out
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
