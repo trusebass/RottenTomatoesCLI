@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -70,21 +69,8 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 		return nil, fmt.Errorf("search failed with status code: %d", resp.StatusCode)
 	}
 
-	// Save a portion of the HTML for debugging - TO REMOVE IN PRODUCTION
-	htmlContent, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	html, _ := htmlContent.Html()
-	// Save the first 50,000 characters of HTML for debugging
-	err = os.WriteFile("debug_search.txt", []byte(html[:50000]), 0644)
-	if err != nil {
-		fmt.Println("Error saving debug file:", err)
-	}
-
-	// Re-parse the HTML from the saved string (because we've already read the body)
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	// Parse the HTML
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -94,10 +80,6 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 	// Look for movie results in the search page
 	// Method 1: Using newer RT layout
 	doc.Find("search-page-media-row").Each(func(i int, item *goquery.Selection) {
-		// Extract and debug the whole row HTML
-		rowHTML, _ := item.Html()
-		fmt.Printf("Found search-page-media-row: %s\n", rowHTML[:100]) // Print first 100 chars
-
 		title := item.Find("[slot=title]").Text()
 		title = strings.TrimSpace(title)
 
@@ -110,78 +92,18 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 			url = api.baseURL + url
 		}
 
-		 // Debug found title and URL
-		fmt.Printf("Found title: %s, URL: %s\n", title, url)
+		// Try to get year
+		year := item.Find("[slot=year]").Text()
+		year = strings.TrimSpace(year)
 
-		// Try direct approach for year
-		year := ""
-
-		// Check for year in dedicated slot
-		yearElem := item.Find("[slot=year]")
-		if yearElem.Length() > 0 {
-			year = strings.TrimSpace(yearElem.Text())
-			fmt.Printf("Found year in slot=year: %s\n", year)
-		}
-
-		// Try to get year from release date text
-		if year == "" {
-			releaseDate := item.Find("[slot=releaseDate]")
-			if releaseDate.Length() > 0 {
-				releaseDateText := strings.TrimSpace(releaseDate.Text())
-				fmt.Printf("Found release date text: %s\n", releaseDateText)
-
-				// Extract year from release date
-				re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-				if matches := re.FindStringSubmatch(releaseDateText); len(matches) > 1 {
-					year = matches[1]
-					fmt.Printf("Extracted year from release date: %s\n", year)
-				}
-			}
-		}
-
-		// Check for year in metadata slot
-		if year == "" {
-			metaElem := item.Find("[slot=metadata]")
-			if metaElem.Length() > 0 {
-				metaText := strings.TrimSpace(metaElem.Text())
-				fmt.Printf("Found metadata text: %s\n", metaText)
-
-				// Extract year pattern
-				re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-				if matches := re.FindStringSubmatch(metaText); len(matches) > 1 {
-					year = matches[1]
-					fmt.Printf("Extracted year from metadata: %s\n", year)
-				}
-			}
-		}
-
-		// Try to find year in any other available slots
-		if year == "" {
-			item.Find("[slot]").Each(func(i int, slotElem *goquery.Selection) {
-				slotName, exists := slotElem.Attr("slot")
-				if exists {
-					slotText := strings.TrimSpace(slotElem.Text())
-					fmt.Printf("Found slot %s with text: %s\n", slotName, slotText)
-
-					// Try to extract year from this slot
-					re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-					if matches := re.FindStringSubmatch(slotText); len(matches) > 1 {
-						year = matches[1]
-						fmt.Printf("Extracted year from slot %s: %s\n", slotName, year)
-					}
-				}
-			})
-		}
-
-		// Try all remaining fallback methods
+		// Fallback methods for year extraction
 		if year == "" {
 			// Try to extract from HTML
 			html, _ := item.Html()
-			re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
+			re := regexp.MustCompile(`(\b(?:19|20)\d{2}\b)`)
 			matches := re.FindStringSubmatch(html)
 			if len(matches) > 1 {
 				year = matches[1]
-				fmt.Printf("Extracted year from HTML: %s\n", year)
 			}
 
 			// Try to extract from URL
@@ -190,7 +112,6 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 				matches := re.FindStringSubmatch(url)
 				if len(matches) > 1 {
 					year = matches[1]
-					fmt.Printf("Extracted year from URL: %s\n", year)
 				}
 			}
 
@@ -200,34 +121,29 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 				matches := re.FindStringSubmatch(title)
 				if len(matches) > 1 {
 					year = matches[1]
-					fmt.Printf("Extracted year from title: %s\n", year)
 				}
-			}
-
-			// Try to extract from data attributes
-			if year == "" {
-				yearAttr, exists := item.Attr("data-year")
-				if exists && yearAttr != "" {
-					year = yearAttr
-					fmt.Printf("Extracted year from data-year attribute: %s\n", year)
-				}
-
-				// Look for release date attribute
-				dateAttr, exists := item.Attr("data-release-date")
-				if exists && dateAttr != "" {
-					re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-					matches := re.FindStringSubmatch(dateAttr)
-					if len(matches) > 1 {
-						year = matches[1]
-						fmt.Printf("Extracted year from data-release-date attribute: %s\n", year)
+				// Try to extract from data attributes if available
+				if year == "" {
+					yearAttr, exists := item.Attr("data-year")
+					if exists && yearAttr != "" {
+						year = yearAttr
 					}
 				}
 			}
 		}
 
-		// If still no year, use placeholder
 		if year == "" {
-			year = "---"
+			// Get year by pre-fetching the movie page
+			if url != "" {
+				yearFromPage, err := api.getYearFromMoviePage(url)
+				if err == nil && yearFromPage != "" {
+					year = yearFromPage
+				}
+			}
+		}
+
+		if year == "" {
+			year = "N/A"
 		}
 
 		results = append(results, SearchResult{
@@ -237,234 +153,132 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 		})
 	})
 
-	// If no results found using the newer layout, try the alternative layout
+	// If no results found, try alternative selectors
 	if len(results) == 0 {
-		// Method 2: Try alternative selectors for older RT layout
-		alternativeSelectors := []string{
-			".findify-components--cards__inner",
-			".js-tile-link",
-			".search__results .poster",
-			".search-page-result",
-			"[data-qa='search-result']",
-		}
+		// Method 2: Using older RT layout
+		doc.Find(".findify-components--cards__inner, .js-tile-link, .search__results .poster").Each(func(i int, item *goquery.Selection) {
+			title := item.Find(".movieTitle").Text()
+			title = strings.TrimSpace(title)
 
-		for _, selector := range alternativeSelectors {
-			doc.Find(selector).Each(func(i int, item *goquery.Selection) {
-				// Debug the found element
-				elemHTML, _ := item.Html()
-				fmt.Printf("Found alternative search result: %s\n", elemHTML[:100]) // Print first 100 chars
-
-				// Try different title selectors
-				titleSelectors := []string{
-					".movieTitle",
-					"p.title",
-					"h3.title",
-					"[data-qa='search-result-title']",
-					"a.title",
-					".movie_title",
-				}
-
-				var title string
-				for _, titleSelector := range titleSelectors {
-					titleElem := item.Find(titleSelector)
-					if titleElem.Length() > 0 {
-						title = strings.TrimSpace(titleElem.Text())
-						fmt.Printf("Found title using selector %s: %s\n", titleSelector, title)
-						break
-					}
-				}
-
-				// Skip if title is empty
-				if title == "" {
-					// Last resort: try any h3 element
-					title = strings.TrimSpace(item.Find("h3").Text())
-					if title == "" {
-						return
-					}
-				}
-
-				// Get URL
-				url, _ := item.Find("a").Attr("href")
-				if url != "" && !strings.HasPrefix(url, "http") {
-					url = api.baseURL + url
-				}
-
-				// Try various methods to get year
-				year := ""
-
-				// Try year-specific classes
-				yearSelectors := []string{
-					".movieYear",
-					".year",
-					".release-year",
-					"[data-qa='release-year']",
-				}
-
-				for _, yearSelector := range yearSelectors {
-					yearElem := item.Find(yearSelector)
-					if yearElem.Length() > 0 {
-						year = strings.TrimSpace(yearElem.Text())
-						fmt.Printf("Found year using selector %s: %s\n", yearSelector, year)
-
-						// Extract just the 4-digit year if there's additional text
-						re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-						if matches := re.FindStringSubmatch(year); len(matches) > 1 {
-							year = matches[1]
-						}
-
-						if year != "" {
-							break
-						}
-					}
-				}
-
-				// Fallback methods for year extraction
-				if year == "" {
-					// Look for subtitle or release info that might contain year
-					subtitleSelectors := []string{
-						".movieSubtitle",
-						".subtle",
-						".release-date",
-						".meta-data",
-					}
-
-					for _, subtitleSelector := range subtitleSelectors {
-						subtitleElem := item.Find(subtitleSelector)
-						if subtitleElem.Length() > 0 {
-							subtitleText := strings.TrimSpace(subtitleElem.Text())
-							fmt.Printf("Found subtitle using selector %s: %s\n", subtitleSelector, subtitleText)
-
-							re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-							if matches := re.FindStringSubmatch(subtitleText); len(matches) > 1 {
-								year = matches[1]
-								fmt.Printf("Extracted year from subtitle: %s\n", year)
-								break
-							}
-						}
-					}
-
-					// Try to extract from HTML
-					if year == "" {
-						html, _ := item.Html()
-						re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-						matches := re.FindStringSubmatch(html)
-						if len(matches) > 1 {
-							year = matches[1]
-							fmt.Printf("Extracted year from HTML: %s\n", year)
-						}
-					}
-
-					// Try to extract from URL
-					if year == "" && strings.Contains(url, "/m/") {
-						re := regexp.MustCompile(`/m/[^/]*_(\d{4})(?:/|$)`)
-						matches := re.FindStringSubmatch(url)
-						if len(matches) > 1 {
-							year = matches[1]
-							fmt.Printf("Extracted year from URL: %s\n", year)
-						}
-					}
-
-					// Try to extract from title
-					if year == "" {
-						re := regexp.MustCompile(`\((\d{4})\)$`)
-						matches := re.FindStringSubmatch(title)
-						if len(matches) > 1 {
-							year = matches[1]
-							fmt.Printf("Extracted year from title: %s\n", year)
-						}
-					}
-				}
-
-				if year == "" {
-					year = "---"
-				}
-
-				results = append(results, SearchResult{
-					Title: title,
-					Year:  year,
-					URL:   url,
-				})
-			})
-
-			// If we found results with this selector, stop trying others
-			if len(results) > 0 {
-				break
-			}
-		}
-	}
-
-	// If still no results, try an additional approach for very different layouts
-	if len(results) == 0 {
-		// Look for any container with links that might be search results
-		doc.Find("a").Each(func(i int, link *goquery.Selection) {
-			href, exists := link.Attr("href")
-			if !exists || !strings.Contains(href, "/m/") {
-				return
-			}
-
-			// This looks like a movie link
-			if !strings.HasPrefix(href, "http") {
-				href = api.baseURL + href
-			}
-
-			// Try to get title from link text or contained elements
-			title := strings.TrimSpace(link.Text())
-
-			// If the link itself doesn't have text, look for child elements
-			if title == "" {
-				title = strings.TrimSpace(link.Find("h2, h3, p.title, .title").Text())
-			}
-
-			// Skip if no title found
 			if title == "" {
 				return
 			}
 
-			// Extract year using our patterns
-			year := ""
+			url, _ := item.Find("a").Attr("href")
+			if url != "" && !strings.HasPrefix(url, "http") {
+				url = api.baseURL + url
+			}
 
-			// Try to extract from URL
-			if strings.Contains(href, "/m/") {
-				re := regexp.MustCompile(`/m/[^/]*_(\d{4})(?:/|$)`)
-				matches := re.FindStringSubmatch(href)
+			// Try to get year
+			year := item.Find(".movieYear").Text()
+			year = strings.TrimSpace(year)
+
+			// Fallback methods for year extraction (same as above)
+			if year == "" {
+				html, _ := item.Html()
+				re := regexp.MustCompile(`(\b(?:19|20)\d{2}\b)`)
+				matches := re.FindStringSubmatch(html)
 				if len(matches) > 1 {
 					year = matches[1]
 				}
-			}
 
-			// Try to extract from title
-			if year == "" {
-				re := regexp.MustCompile(`\((\d{4})\)$`)
-				matches := re.FindStringSubmatch(title)
-				if len(matches) > 1 {
-					year = matches[1]
+				if year == "" && strings.Contains(url, "/m/") {
+					re := regexp.MustCompile(`/m/[^/]*_(\d{4})(?:/|$)`)
+					matches := re.FindStringSubmatch(url)
+					if len(matches) > 1 {
+						year = matches[1]
+					}
+				}
+
+				if year == "" {
+					re := regexp.MustCompile(`\((\d{4})\)$`)
+					matches := re.FindStringSubmatch(title)
+					if len(matches) > 1 {
+						year = matches[1]
+					}
+					// Try to get year by pre-fetching the movie page
+					if year == "" && url != "" {
+						yearFromPage, err := api.getYearFromMoviePage(url)
+						if err == nil && yearFromPage != "" {
+							year = yearFromPage
+						}
+					}
 				}
 			}
 
-			// Try to extract from nearby text
 			if year == "" {
-				// Look at parent and siblings for year
-				parentHTML, _ := link.Parent().Html()
-				re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-				matches := re.FindStringSubmatch(parentHTML)
-				if len(matches) > 1 {
-					year = matches[1]
-				}
-			}
-
-			if year == "" {
-				year = "---"
+				year = "N/A"
 			}
 
 			results = append(results, SearchResult{
 				Title: title,
 				Year:  year,
-				URL:   href,
+				URL:   url,
 			})
 		})
 	}
 
 	return results, nil
+}
+
+// getYearFromMoviePage extracts the year from a movie's page
+// This is a last resort to get the year when it's not available in search results
+func (api *RottenTomatoesAPI) getYearFromMoviePage(movieURL string) (string, error) {
+	req, err := http.NewRequest("GET", movieURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+	// Use a shorter timeout for this quick request
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("failed with status code: %d", resp.StatusCode)
+	}
+
+	// Parse HTML to find the year
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// Get only part of the HTML content to save time
+	htmlContent, err := doc.Html()
+	if err != nil {
+		return "", err
+	}
+
+	// Extract year using patterns
+	yearPatterns := []string{
+		`(?:dateCreated|release)["\']?\s*:\s*["\']?(?:[^"\']*?)(\d{4})`,
+		`(?:release|released|year)[^<>\d]{1,20}((?:19|20)\d{2})`,
+		`(?:movie|film)[^<>\d]{1,30}((?:19|20)\d{2})`,
+	}
+
+	for _, pattern := range yearPatterns {
+		re := regexp.MustCompile(pattern)
+		if matches := re.FindStringSubmatch(htmlContent); len(matches) > 1 {
+			return matches[1], nil
+		}
+	}
+
+	// Fallback to any year in the first part of HTML
+	yearRe := regexp.MustCompile(`((?:19|20)\d{2})`)
+	if matches := yearRe.FindStringSubmatch(htmlContent[0:5000]); len(matches) > 1 {
+		return matches[1], nil
+	}
+
+	return "", nil
 }
 
 // openBrowser opens a URL in the default browser
