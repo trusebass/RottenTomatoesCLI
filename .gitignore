@@ -14,6 +14,7 @@ __pycache__/
 
 # Go binary and test files
 rt-tui/rt-tui
+rt-tui/rotten
 *.test
 *.out
 
