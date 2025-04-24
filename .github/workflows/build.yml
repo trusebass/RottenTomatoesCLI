@@ -2,9 +2,9 @@ name: Go Build and Test
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    tags:
+      - 'v*'  # Run workflow on version tags, e.g. v1.0.0
+  workflow_dispatch:  # Allows manual triggering of the workflow
 
 jobs:
   build:
@@ -35,3 +35,48 @@ jobs:
         name: rotten-${{ matrix.os }}-go${{ matrix.go }}
         path: rt-tui/rotten*
         if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      # Rename files to have clear platform names
+      - name: Rename artifacts for clarity
+        run: |
+          mkdir -p release-artifacts
+          
+          # Handle Linux builds
+          if [ -d "artifacts/rotten-ubuntu-latest-go1.x" ]; then
+            cp artifacts/rotten-ubuntu-latest-go1.x/rotten release-artifacts/rotten-linux
+            chmod +x release-artifacts/rotten-linux
+          fi
+          
+          # Handle macOS builds
+          if [ -d "artifacts/rotten-macos-latest-go1.x" ]; then
+            cp artifacts/rotten-macos-latest-go1.x/rotten release-artifacts/rotten-macos
+            chmod +x release-artifacts/rotten-macos
+          fi
+          
+          # Handle Windows builds
+          if [ -d "artifacts/rotten-windows-latest-go1.x" ]; then
+            cp artifacts/rotten-windows-latest-go1.x/rotten.exe release-artifacts/rotten-windows.exe
+          fi
+          
+          # List files for verification
+          ls -la release-artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-artifacts/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
