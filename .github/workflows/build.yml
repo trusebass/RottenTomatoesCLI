@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]  # Removed windows-latest
         go: ['1.23', '1.x']
 
     steps:
@@ -27,18 +27,13 @@ jobs:
     - name: Build
       run: |
         cd rt-tui
-        go build -v -o rotten${{ matrix.os == 'windows-latest' && '.exe' || '' }}
-        
-    - name: Debug build output
-      run: |
-        echo "Contents of build directory:"
-        ls -la rt-tui/
+        go build -v -o rotten
         
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
         name: rotten-${{ matrix.os }}-go${{ matrix.go }}
-        path: rt-tui/rotten*
+        path: rt-tui/rotten
         if-no-files-found: error
 
   release:
@@ -52,83 +47,23 @@ jobs:
         with:
           path: artifacts
           
-      # Enhanced debugging to see exact file structure
-      - name: Debug artifacts
-        run: |
-          echo "Listing all downloaded artifacts with detailed view:"
-          find artifacts -type f | sort
-          echo "Contents of each artifact directory:"
-          for dir in artifacts/*/; do
-            echo "Directory: $dir"
-            ls -la "$dir"
-          done
-          
-      # Completely revamped artifact handling
+      # Simplified release preparation - just Linux and macOS
       - name: Prepare release artifacts
         run: |
           mkdir -p release-artifacts
           
-          # For debugging
-          echo "Starting release preparation..."
-          
-          # More robust Linux artifact handling
-          echo "Processing Linux artifact..."
+          # Linux build
           if [ -d "artifacts/rotten-ubuntu-latest-go1.x" ]; then
-            if [ -f "artifacts/rotten-ubuntu-latest-go1.x/rotten" ]; then
-              cp "artifacts/rotten-ubuntu-latest-go1.x/rotten" "release-artifacts/rotten-linux"
-              chmod +x "release-artifacts/rotten-linux"
-              echo "Linux binary copied successfully"
-            else
-              echo "Linux binary not found, searching for alternatives..."
-              find artifacts/rotten-ubuntu-latest-go1.x -type f -exec file {} \; | grep "ELF.*executable" || true
-              find artifacts/rotten-ubuntu-latest-go1.x -type f -exec cp {} "release-artifacts/rotten-linux" \; -quit && \
-                chmod +x "release-artifacts/rotten-linux" && \
-                echo "Found alternative Linux binary"
-            fi
-          else
-            echo "Linux artifact directory not found"
+            cp artifacts/rotten-ubuntu-latest-go1.x/rotten release-artifacts/rotten-linux
+            chmod +x release-artifacts/rotten-linux
+            echo "Linux binary prepared"
           fi
           
-          # More robust macOS artifact handling
-          echo "Processing macOS artifact..."
+          # macOS build
           if [ -d "artifacts/rotten-macos-latest-go1.x" ]; then
-            if [ -f "artifacts/rotten-macos-latest-go1.x/rotten" ]; then
-              cp "artifacts/rotten-macos-latest-go1.x/rotten" "release-artifacts/rotten-macos"
-              chmod +x "release-artifacts/rotten-macos"
-              echo "macOS binary copied successfully"
-            else
-              echo "macOS binary not found, searching for alternatives..."
-              find artifacts/rotten-macos-latest-go1.x -type f -exec file {} \; | grep "Mach-O.*executable" || true
-              find artifacts/rotten-macos-latest-go1.x -type f -exec cp {} "release-artifacts/rotten-macos" \; -quit && \
-                chmod +x "release-artifacts/rotten-macos" && \
-                echo "Found alternative macOS binary"
-            fi
-          else
-            echo "macOS artifact directory not found"
-          fi
-          
-          # Completely reworked Windows artifact handling
-          echo "Processing Windows artifact..."
-          if [ -d "artifacts/rotten-windows-latest-go1.x" ]; then
-            # Try multiple possible filenames
-            if [ -f "artifacts/rotten-windows-latest-go1.x/rotten.exe" ]; then
-              cp "artifacts/rotten-windows-latest-go1.x/rotten.exe" "release-artifacts/rotten-windows.exe"
-              echo "Windows binary (rotten.exe) copied successfully"
-            elif [ -f "artifacts/rotten-windows-latest-go1.x/rotten" ]; then
-              cp "artifacts/rotten-windows-latest-go1.x/rotten" "release-artifacts/rotten-windows.exe"
-              echo "Windows binary (rotten) copied successfully"
-            else
-              echo "Windows binary not found by name, searching for any .exe file..."
-              find artifacts/rotten-windows-latest-go1.x -name "*.exe" -exec cp {} "release-artifacts/rotten-windows.exe" \; -quit && \
-                echo "Found .exe file" || \
-                echo "No .exe file found, looking for any file..."
-              
-              # If still not found, just take any file and rename it
-              find artifacts/rotten-windows-latest-go1.x -type f -exec cp {} "release-artifacts/rotten-windows.exe" \; -quit && \
-                echo "Found some file to use as Windows binary"
-            fi
-          else
-            echo "Windows artifact directory not found"
+            cp artifacts/rotten-macos-latest-go1.x/rotten release-artifacts/rotten-macos
+            chmod +x release-artifacts/rotten-macos
+            echo "macOS binary prepared"
           fi
           
           # List files for verification
