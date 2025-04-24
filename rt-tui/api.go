@@ -41,12 +41,13 @@ func NewRottenTomatoesAPI() *RottenTomatoesAPI {
 	return &RottenTomatoesAPI{
 		baseURL: "https://www.rottentomatoes.com",
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 3 * time.Second,
 		},
 	}
 }
 
 // SearchMovies searches for movies by query term
+// go function declaration syntax: the parenthesis after func is a function receiver!
 func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error) {
 	searchURL := fmt.Sprintf("%s/search?search=%s", api.baseURL, url.QueryEscape(query))
 
@@ -63,6 +64,17 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 	if err != nil {
 		return nil, err
 	}
+
+	/*
+		The defer keyword schedules the Close() method to be called when the surrounding function returns, regardless of whether the function exits normally or due to an error. This ensures that resources associated with the response body are properly released.
+
+		The Close() method for HTTP response bodies typically:
+
+		Releases network resources associated with the connection
+		Returns the connection to a connection pool for reuse (if applicable)
+		Ensures any remaining unread data is drained
+		Not closing response bodies is a common source of resource leaks in Go applications. Each unclosed response body can leave an open file descriptor or network connection, potentially leading to resource exhaustion over time. The defer resp.Body.Close() pattern is usually placed immediately after checking for request errors, ensuring cleanup happens regardless of how the function exits.
+	*/
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -92,9 +104,18 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 			url = api.baseURL + url
 		}
 
-		// Try to get year
-		year := item.Find("[slot=year]").Text()
+		year, _ := item.Attr("releaseyear")
 		year = strings.TrimSpace(year)
+
+		if len(year) != 4 {
+			year = ""
+		}
+
+		// Try to get year
+		if year == "" {
+			year = item.Find("[slot=year]").Text()
+			year = strings.TrimSpace(year)
+		}
 
 		// Fallback methods for year extraction
 		if year == "" {
@@ -132,15 +153,15 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 			}
 		}
 
-		if year == "" {
-			// Get year by pre-fetching the movie page
-			if url != "" {
-				yearFromPage, err := api.getYearFromMoviePage(url)
-				if err == nil && yearFromPage != "" {
-					year = yearFromPage
-				}
-			}
-		}
+		// if year == "" {
+		// 	// Get year by pre-fetching the movie page
+		// 	// if url != "" {
+		// 	// 	yearFromPage, err := api.getYearFromMoviePage(url)
+		// 	// 	if err == nil && yearFromPage != "" {
+		// 	// 		year = yearFromPage
+		// 	// 	}
+		// 	// }
+		// }
 
 		if year == "" {
 			year = "N/A"
@@ -153,6 +174,7 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 		})
 	})
 
+	// ---- YEAR IN CASE OF OLDER RT LAYOUT ----
 	// If no results found, try alternative selectors
 	if len(results) == 0 {
 		// Method 2: Using older RT layout
@@ -197,12 +219,12 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 						year = matches[1]
 					}
 					// Try to get year by pre-fetching the movie page
-					if year == "" && url != "" {
-						yearFromPage, err := api.getYearFromMoviePage(url)
-						if err == nil && yearFromPage != "" {
-							year = yearFromPage
-						}
-					}
+					// if year == "" && url != "" {
+					// 	yearFromPage, err := api.getYearFromMoviePage(url)
+					// 	if err == nil && yearFromPage != "" {
+					// 		year = yearFromPage
+					// 	}
+					// }
 				}
 			}
 
@@ -233,7 +255,7 @@ func (api *RottenTomatoesAPI) getYearFromMoviePage(movieURL string) (string, err
 
 	// Use a shorter timeout for this quick request
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 3 * time.Second,
 	}
 
 	resp, err := client.Do(req)

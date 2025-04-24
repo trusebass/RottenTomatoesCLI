@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 import argparse
 import sys
 import re
-import os
 from urllib.parse import quote
 import json
 
@@ -27,33 +26,28 @@ class RottenTomatoesAPI:
         soup = BeautifulSoup(response.text, 'html.parser')
         search_results = []
         
-        # Save the search results HTML for debugging
-        os.makedirs(os.path.dirname("debug_search.txt"), exist_ok=True)
-        with open("debug_search.txt", "w", encoding="utf-8") as f:
-            f.write(str(soup))
-        
-        # Try new selectors for 2025 Rotten Tomatoes HTML structure
-        movie_items = soup.select('.search-page-media-row') or soup.select('search-page-media-row')
-        print(f"Found {len(movie_items)} items with primary selectors")
+        # Look for movie results in the search page
+        movie_items = soup.select('search-page-media-row')
+        print(f"Found {len(movie_items)} items with selector 'search-page-media-row'")
         
         if not movie_items:
-            # Try alternative selectors
-            movie_items = soup.select('.findify-components--cards__inner') or soup.select('.js-tile-link') or soup.select('.search__results .poster')
-            print(f"Found {len(movie_items)} items with alternative selectors")
-
-            # Try another set of general selectors for movie cards
+            # Alternate method to find movies
+            movie_items = soup.select('.findify-components--cards__inner')
+            print(f"Found {len(movie_items)} items with alternate selector '.findify-components--cards__inner'")
+            
+            # Try another selector for movie items
             if not movie_items:
-                movie_items = soup.select('.mb-movie') or soup.select('.movie_item') or soup.select('[data-qa="discovery-media-list-item-caption"]')
+                movie_items = soup.select('.js-tile-link') or soup.select('.search__results .poster')
                 print(f"Found {len(movie_items)} items with additional selectors")
+        
+        # Save the search results HTML for debugging
+        with open("debug_search.txt", "w", encoding="utf-8") as f:
+            f.write(str(soup)[:10000])
         
         for item in movie_items:
             try:
                 # Extract title
-                title_elem = (item.select_one('[slot="title"]') or 
-                             item.select_one('.movieTitle') or 
-                             item.select_one('h3') or
-                             item.select_one('[data-qa="discovery-media-list-item-title"]'))
-                
+                title_elem = item.select_one('[slot="title"]') or item.select_one('.movieTitle')
                 if not title_elem:
                     continue
                 
@@ -69,45 +63,30 @@ class RottenTomatoesAPI:
                     url = self.base_url + url
                 
                 # Try multiple approaches to extract the year
-                year = "---"
+                year = "N/A"
                 
                 # Method 1: Using dedicated year element
-                year_elem = (item.select_one('[slot="year"]') or 
-                            item.select_one('[data-qa="discovery-media-list-item-start-year"]') or
-                            item.select_one('.start-year'))
-                
+                year_elem = item.select_one('[slot="year"]') or item.select_one('.movieYear')
                 if year_elem:
-                    year_text = year_elem.text.strip()
-                    # Extract year from text like "(2010)" or just "2010"
-                    year_match = re.search(r'(?:\()?(\d{4})(?:\))?', year_text)
+                    year = year_elem.text.strip()
+                
+                # Method 2: Look for year in the item HTML
+                if year == "N/A":
+                    # Look for a year pattern in the item's HTML
+                    item_html = str(item)
+                    year_match = re.search(r'(\b(?:19|20)\d{2}\b)', item_html)
                     if year_match:
                         year = year_match.group(1)
                 
-                # Method 2: Look for any span with a 4-digit year
-                if year == "---":
-                    for span in item.select('span'):
-                        text = span.text.strip()
-                        year_match = re.search(r'\b(19\d\d|20\d\d)\b', text)
-                        if year_match:
-                            year = year_match.group(1)
-                            break
-                
-                # Method 3: Check for year in any text inside the item
-                if year == "---":
-                    item_text = item.get_text()
-                    year_matches = re.findall(r'\b(19\d\d|20\d\d)\b', item_text)
-                    if year_matches:
-                        year = year_matches[0]
-                
-                # Method 4: Extract year from URL if it contains year info
-                if year == "---" and '/m/' in url:
+                # Method 3: Extract year from URL if it contains year info
+                if year == "N/A" and '/m/' in url:
                     # URLs sometimes contain the year, like /m/movie_title_2010
                     url_year_match = re.search(r'/m/[^/]*_(\d{4})(?:/|$)', url)
                     if url_year_match:
                         year = url_year_match.group(1)
                 
-                # Method 5: Try to extract from movie title if it ends with a year
-                if year == "---":
+                # Method 4: Try to extract from movie title if it ends with a year
+                if year == "N/A":
                     title_year_match = re.search(r'\((\d{4})\)$', title)
                     if title_year_match:
                         year = title_year_match.group(1)
@@ -445,25 +424,26 @@ def main():
     selection = -1
     while not (0 <= selection < len(search_results)):
         try:
-            choice = input("\nEnter the number of the movie (or 'q' to quit): ")
-            if choice.lower() == 'q':
+            selection = int(input(f"\nSelect a movie (1-{len(search_results)}) or 0 to quit: ")) - 1
+            if selection == -1:
                 print("Exiting...")
-                sys.exit(0)
-            selection = int(choice) - 1
-            if not (0 <= selection < len(search_results)):
-                print(f"Please enter a number between 1 and {len(search_results)}")
+                return
         except ValueError:
-            print("Please enter a valid number")
+            print("Please enter a valid number.")
     
-    # Get detailed movie info
+    # Get and display ratings for the selected movie
     selected_movie = search_results[selection]
-    print(f"\nFetching details for {selected_movie['title']}...")
-    movie_info = rt_api.get_movie_ratings(selected_movie['url'])
+    print(f"\nFetching ratings for '{selected_movie['title']}'...")
     
-    if movie_info:
-        display_movie_info(movie_info)
+    movie_details = rt_api.get_movie_ratings(selected_movie['url'])
+    if movie_details:
+        display_movie_info(movie_details)
     else:
-        print("Failed to retrieve movie information.")
+        print("Failed to retrieve movie ratings.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nExiting...")
+        sys.exit(0)

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -98,6 +99,12 @@ func NewModel() Model {
 	ti.Focus()
 	ti.CharLimit = 100
 	ti.Width = 40
+
+	// Create explicit key mappings for Option+Backspace (Alt+Backspace)
+	ti.KeyMap.DeleteWordBackward = key.NewBinding(
+		key.WithKeys("option+backspace"),
+	)
+	ti.KeyMap.DeleteWordBackward.SetEnabled(true)
 
 	// Set up spinner for loading states
 	sp := spinner.New()
@@ -261,7 +268,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.error = msg.err
 		m.state = stateError
 		// After a delay, go back to search input
-		cmds = append(cmds, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+		cmds = append(cmds, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 			return resetMsg{}
 		}))
 
@@ -368,10 +375,22 @@ func (m Model) formatMovieDetails() string {
 	sb.WriteString(scoreStyle.Render(audienceScore))
 	sb.WriteString("\n\n")
 
-	// Critics consensus
+	// Critics consensus - properly wrapped
 	sb.WriteString(subtitleStyle.Render("Critics Consensus:"))
 	sb.WriteString("\n")
-	sb.WriteString(normalTextStyle.Render(m.movie.Consensus))
+
+	// Format the consensus text to ensure it wraps properly
+	// Limit the line width to viewport width minus padding
+	maxWidth := m.viewport.Width - 8
+	if maxWidth < 20 {
+		maxWidth = 60 // Fallback if viewport width is too small
+	}
+
+	// Wrap the consensus text to fit the viewport
+	consensus := m.movie.Consensus
+	// Handle long words by inserting spaces if needed
+	wrapped := wrapText(consensus, maxWidth)
+	sb.WriteString(normalTextStyle.Render(wrapped))
 	sb.WriteString("\n\n")
 
 	// URL
@@ -380,6 +399,53 @@ func (m Model) formatMovieDetails() string {
 	sb.WriteString(normalTextStyle.Render(m.movie.URL))
 
 	return sb.String()
+}
+
+// wrapText wraps text to fit within a given width
+func wrapText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+
+	var result strings.Builder
+	var lineLength int
+
+	words := strings.Fields(text)
+	for i, word := range words {
+		// Handle very long words
+		if len(word) > width {
+			// If at the beginning of a line, add the word with a break
+			if lineLength == 0 {
+				result.WriteString(word[:width-1] + "-")
+				word = word[width-1:]
+				lineLength = 0
+				result.WriteString("\n")
+			}
+
+			// Break the long word
+			for len(word) > width {
+				result.WriteString(word[:width-1] + "-\n")
+				word = word[width-1:]
+				lineLength = 0
+			}
+		}
+
+		// Check if adding this word would exceed the width
+		if lineLength+len(word) > width {
+			// Start a new line
+			result.WriteString("\n")
+			lineLength = 0
+		} else if i > 0 && lineLength > 0 {
+			// Add a space before the word (unless it's the first word on a line)
+			result.WriteString(" ")
+			lineLength++
+		}
+
+		result.WriteString(word)
+		lineLength += len(word)
+	}
+
+	return result.String()
 }
 
 // Custom message types
