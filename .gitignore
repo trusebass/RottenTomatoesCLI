@@ -1,34 +1,56 @@
-# Python virtual environment
-rtenv/
-venv/
-env/
-ENV/
+# Go specific ignores
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
+/Godeps/
+demo.tape
 
-# Debug files
-debug_*.txt
-
-# Python cache files
+# Python specific ignores
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Go binary and test files
-rt-tui/rt-tui
-rt-tui/rotten
-*.test
-*.out
-
-# Distribution / packaging
-dist/
+*.so
+.Python
+env/
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
 *.egg-info/
+.installed.cfg
+*.egg
+/rtenv/
+/RottenTomatoesCLIRawPython/
 
-# OS specific files
-.DS_Store
-Thumbs.db
+# Specific to this project
+rt-tui/rotten
+rt-tui/rt-tui
+debug_*.txt
+debug_*.html
 
-# IDE files
+# Editor files
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
