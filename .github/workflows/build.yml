@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go: ['1.22', '1.x']
+        go: ['1.23', '1.x']
 
     steps:
     - name: Check out code
@@ -24,12 +24,6 @@ jobs:
       with:
         go-version: ${{ matrix.go }}
         
-    - name: Update go.mod for CI compatibility
-      run: |
-        # Adjust go.mod version for CI compatibility
-        sed -i.bak 's/go 1.23.0/go 1.22/' rt-tui/go.mod
-        cat rt-tui/go.mod | head -3
-
     - name: Build
       run: |
         cd rt-tui
