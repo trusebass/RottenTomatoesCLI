@@ -30,7 +30,7 @@ jobs:
         go build -v -o rotten
 
     - name: Upload build artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: rotten-${{ matrix.os }}
         path: rt-tui/rotten*

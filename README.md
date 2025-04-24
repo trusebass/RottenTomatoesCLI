@@ -16,6 +16,13 @@ A Go-based terminal user interface for searching and retrieving movie ratings fr
 - Open movie pages directly in your web browser
 - Fast and lightweight with minimal dependencies
 
+## Features to be implemented
+- Display more movie information on movie page such as cast, director etc.
+- Display movie thumbnail in movie page
+- Display movie thumbnail in search results list
+- Creating personal movie lists stored locally and adding movies to them
+- Big Beast: adding movies to one's rotten tomatoes watchlist (requires login yada yada)
+
 ## Installation
 
 ### From Binary (Recommended)
@@ -66,12 +73,10 @@ Download the latest release from the [Releases](https://github.com/yourusername/
 
 ## Project Structure
 
-- `rt-tui/` - Main Go implementation of the terminal UI
+- `rt-tui/` - Go implementation of the terminal UI
   - `main.go` - Entry point of the application
   - `ui.go` - Terminal UI implementation using Bubble Tea
   - `api.go` - API client for Rotten Tomatoes
-
-- `RottenTomatoesCLIRawPython/` - Original Python prototype
 
 ## Dependencies
 
