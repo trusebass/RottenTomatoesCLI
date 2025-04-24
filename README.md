@@ -4,7 +4,7 @@ A Go-based terminal user interface for searching and retrieving movie ratings fr
 
 ## Demo
 
-![RT-TUI Demo](rt-tui-demo.gif)
+![RT-TUI Demo](rotten-demo.gif)
 
 
 
