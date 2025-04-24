@@ -27,7 +27,7 @@ jobs:
     - name: Build
       run: |
         cd rt-tui
-        go build -v -o rotten
+        go build -v -o rotten${{ matrix.os == 'windows-latest' && '.exe' || '' }}
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
@@ -47,6 +47,12 @@ jobs:
         with:
           path: artifacts
           
+      # Debug to see what files are in the artifacts directory
+      - name: Debug artifacts
+        run: |
+          echo "Listing all downloaded artifacts:"
+          find artifacts -type f | sort
+          
       # Rename files to have clear platform names
       - name: Rename artifacts for clarity
         run: |
@@ -54,22 +60,23 @@ jobs:
           
           # Handle Linux builds
           if [ -d "artifacts/rotten-ubuntu-latest-go1.x" ]; then
-            cp artifacts/rotten-ubuntu-latest-go1.x/rotten release-artifacts/rotten-linux
+            find artifacts/rotten-ubuntu-latest-go1.x -type f -name "rotten*" -exec cp {} release-artifacts/rotten-linux \;
             chmod +x release-artifacts/rotten-linux
           fi
           
           # Handle macOS builds
           if [ -d "artifacts/rotten-macos-latest-go1.x" ]; then
-            cp artifacts/rotten-macos-latest-go1.x/rotten release-artifacts/rotten-macos
+            find artifacts/rotten-macos-latest-go1.x -type f -name "rotten*" -exec cp {} release-artifacts/rotten-macos \;
             chmod +x release-artifacts/rotten-macos
           fi
           
           # Handle Windows builds
           if [ -d "artifacts/rotten-windows-latest-go1.x" ]; then
-            cp artifacts/rotten-windows-latest-go1.x/rotten.exe release-artifacts/rotten-windows.exe
+            find artifacts/rotten-windows-latest-go1.x -type f -name "rotten*" -exec cp {} release-artifacts/rotten-windows.exe \;
           fi
           
           # List files for verification
+          echo "Files ready for release:"
           ls -la release-artifacts/
 
       - name: Create Release
