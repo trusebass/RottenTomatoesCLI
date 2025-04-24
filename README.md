@@ -27,7 +27,7 @@ A Go-based terminal user interface for searching and retrieving movie ratings fr
 
 ### From Binary (Recommended)
 
-Download the latest release from the [Releases](https://github.com/yourusername/RottenTomatoesCLI/releases) page.
+Download the latest release from the [Releases](https://github.com/trusebass/RottenTomatoesCLI/releases) page.
 
 ### From Source
 
