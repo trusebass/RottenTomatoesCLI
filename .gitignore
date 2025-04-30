@@ -9,6 +9,7 @@
 /vendor/
 /Godeps/
 demo.tape
+RottenTomatoesCLI
 
 # Python specific ignores
 __pycache__/

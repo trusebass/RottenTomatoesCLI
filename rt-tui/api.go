@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -28,6 +31,11 @@ type SearchResult struct {
 	Title string
 	Year  string
 	URL   string
+}
+
+// MovieList represents a serializable movie list
+type MovieList struct {
+	Movies []*Movie `json:"movies"`
 }
 
 // RottenTomatoesAPI handles interactions with Rotten Tomatoes
@@ -153,16 +161,6 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 			}
 		}
 
-		// if year == "" {
-		// 	// Get year by pre-fetching the movie page
-		// 	// if url != "" {
-		// 	// 	yearFromPage, err := api.getYearFromMoviePage(url)
-		// 	// 	if err == nil && yearFromPage != "" {
-		// 	// 		year = yearFromPage
-		// 	// 	}
-		// 	// }
-		// }
-
 		if year == "" {
 			year = "N/A"
 		}
@@ -217,14 +215,8 @@ func (api *RottenTomatoesAPI) SearchMovies(query string) ([]SearchResult, error)
 					matches := re.FindStringSubmatch(title)
 					if len(matches) > 1 {
 						year = matches[1]
+						// Try to get year by pre-fetching the movie page
 					}
-					// Try to get year by pre-fetching the movie page
-					// if year == "" && url != "" {
-					// 	yearFromPage, err := api.getYearFromMoviePage(url)
-					// 	if err == nil && yearFromPage != "" {
-					// 		year = yearFromPage
-					// 	}
-					// }
 				}
 			}
 
@@ -530,4 +522,71 @@ func (api *RottenTomatoesAPI) GetMovieDetails(movieURL string) (*Movie, error) {
 	}
 
 	return movie, nil
+}
+
+// SaveMovieLists saves all movie lists to a JSON file
+func SaveMovieLists(lists map[string][]*Movie) error {
+	// Create .config directory if it doesn't exist
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	configDir := filepath.Join(homeDir, ".config", "rotten-cli")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return err
+	}
+
+	listsFilePath := filepath.Join(configDir, "lists.json")
+
+	// Convert map to a serializable format
+	serializedLists := make(map[string]MovieList)
+	for name, movies := range lists {
+		serializedLists[name] = MovieList{Movies: movies}
+	}
+
+	// Marshal to JSON
+	data, err := json.MarshalIndent(serializedLists, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	// Write to file
+	return os.WriteFile(listsFilePath, data, 0644)
+}
+
+// LoadMovieLists loads all movie lists from a JSON file
+func LoadMovieLists() (map[string][]*Movie, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	listsFilePath := filepath.Join(homeDir, ".config", "rotten-cli", "lists.json")
+
+	// Check if file exists
+	if _, err := os.Stat(listsFilePath); os.IsNotExist(err) {
+		// Return empty lists if file doesn't exist yet
+		return make(map[string][]*Movie), nil
+	}
+
+	// Read file
+	data, err := os.ReadFile(listsFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal JSON
+	var serializedLists map[string]MovieList
+	if err := json.Unmarshal(data, &serializedLists); err != nil {
+		return nil, err
+	}
+
+	// Convert to expected format
+	lists := make(map[string][]*Movie)
+	for name, list := range serializedLists {
+		lists[name] = list.Movies
+	}
+
+	return lists, nil
 }
